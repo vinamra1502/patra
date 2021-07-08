@@ -68,12 +68,6 @@ spec:
           volumeMounts:
             - name: logging-app-log-dir
               mountPath: /opt/dtenv/logs
-            # - name: jvm-heap-dump
-            #   mountPath: /opt/dtenv/logs/dumps
-            # - name: env
-            #   mountPath: /usr/src/myapp/config
-            # - name: log
-            #   mountPath: /etc/rsyslog.d
           readinessProbe:
             httpGet:
               path: /actuator/health
@@ -93,28 +87,12 @@ spec:
       # imagePullSecrets:
       #   - name: nexus-secret
       volumes:
-        # - name: logging-app-log-dir
-        #   hostPath:
-        #     path: /opt/dtenv/logs
+       
         - name: logging-app-log-dir
           nfs:
             server: fs-ce678934.efs.eu-central-1.amazonaws.com
             path: /
-        # - name: jvm-heap-dump
-        #   hostPath:
-        #     path: /opt/dtenv/logs/dumps
-        # - name: env
-        #   configMap:
-        #     name: patra-bifrost
-        #     items:
-        #       - key: env.js
-        #         path: application.properties
-        # - name: log
-        #   configMap:
-        #     name: patra-bifrost-log
-        #     items:
-        #       - key: log.js
-        #         path: k8s-log.conf
+
 
 ---
 apiVersion: v1
