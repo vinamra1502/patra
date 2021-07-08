@@ -1,0 +1,192 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: patra-bifrost
+  namespace: patra-shared-$ENV
+spec:
+  # replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app: patra-bifrost
+  template:
+    metadata:
+      labels:
+        app: patra-bifrost
+        prometheus: jvm
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - patra-bifrost
+                topologyKey: "kubernetes.io/hostname"
+      initContainers:
+        - name: volume-mount-init
+          image: busybox
+          # command: ["sh", "-c", "chown -R 1000:1000 /opt/dtenv/logs"]
+          volumeMounts:
+            - name: logging-app-log-dir
+              mountPath: /opt/dtenv/logs
+            # - name: jvm-heap-dump
+            #   mountPath: /opt/dtenv/logs/dumps
+      containers:
+        - image: 792287678345.dkr.ecr.eu-central-1.amazonaws.com/patra/patra-bifrost:1
+          name: patra-bifrost
+          # securityContext:
+          #   runAsUser: 1000
+          #   allowPrivilegeEscalation: false
+          env:
+            - name: jprofile
+              value: "jprofilevalue"
+            - name: applogname
+              value: "patra-bifrost"
+            - name: "JVM_RESOURCES"
+              value: "-Xmx2500m -Xms2500m"
+            - name: "natco"
+              value: "shared"
+          ports:
+            - name: patra-bifrost
+              containerPort: 8021
+          resources:
+            requests:
+              memory: "4000Mi"
+              cpu: "2.0"
+            limits:
+              memory: "4000Mi"
+              cpu: "2.0"
+          volumeMounts:
+            - name: logging-app-log-dir
+              mountPath: /opt/dtenv/logs
+            # - name: jvm-heap-dump
+            #   mountPath: /opt/dtenv/logs/dumps
+            # - name: env
+            #   mountPath: /usr/src/myapp/config
+            # - name: log
+            #   mountPath: /etc/rsyslog.d
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8021
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8021
+            initialDelaySeconds: 30
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 10
+      # imagePullSecrets:
+      #   - name: nexus-secret
+      volumes:
+        # - name: logging-app-log-dir
+        #   hostPath:
+        #     path: /opt/dtenv/logs
+        - name: logging-app-log-dir
+          nfs:
+            server: fs-ce678934.efs.eu-central-1.amazonaws.com
+            path: /
+        # - name: jvm-heap-dump
+        #   hostPath:
+        #     path: /opt/dtenv/logs/dumps
+        # - name: env
+        #   configMap:
+        #     name: patra-bifrost
+        #     items:
+        #       - key: env.js
+        #         path: application.properties
+        # - name: log
+        #   configMap:
+        #     name: patra-bifrost-log
+        #     items:
+        #       - key: log.js
+        #         path: k8s-log.conf
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: patra-bifrost
+  namespace: patra-shared-$ENV
+spec:
+  ports:
+    - name: patra-bifrost
+      port: 8021
+      protocol: TCP
+      targetPort: 8021
+  selector:
+    app: patra-bifrost
+
+
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: patra-bifrost
+  namespace: patra-shared-$ENV
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/tags: Name=patraProdEks,Owner=patra-EM,Project=patraProdEks,Purpose=patraProdEksCluster,Scheme=AlbPublic
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-path: /actuator
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/success-codes: 200,201
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
+    alb.ingress.kubernetes.io/group.name: albpatraprod
+
+spec:
+  rules:
+    - host: bifrost-shared.patra.yo-digital.com
+      http:
+        paths:
+          - path: /*
+            backend:
+              serviceName: patra-bifrost
+              servicePort: 8021
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: patra-bifrost
+  namespace: patra-shared-$ENV
+spec:
+  maxReplicas: 7
+  minReplicas: 4
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: patra-bifrost
+  targetCPUUtilizationPercentage: 70
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: patra-bifrost
+  namespace: patra-shared-$ENV
+spec:
+  minAvailable: 80%
+  selector:
+    matchLabels:
+      app: patra-bifrost

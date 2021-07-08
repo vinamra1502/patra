@@ -1,0 +1,13 @@
+FROM openjdk:8-jdk-slim
+RUN apt-get update
+COPY ./bifrost/target/bifrost-patrapomversion.jar /opt/patraenv/
+ARG ELASTIC_APM_AGEN_VERSION=1.17.0
+RUN wget https://repo1.maven.org/maven2/co/elastic/apm/elastic-apm-agent/${ELASTIC_APM_AGEN_VERSION}/elastic-apm-agent-${ELASTIC_APM_AGEN_VERSION}.jar -O /opt/patraenv/elastic-apm-agent.jar
+ENV JMX_OPTS=-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.net.preferIPv4Stack=true -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.port=12345 -Dcom.sun.management.jmxremote.rmi.port=12345 -Djava.rmi.server.hostname=127.0.0.1
+ENV JVM_RESOURCES="-Xmx500m -Xms500m"
+RUN useradd -c 'patrauser user' -m -d /opt/patraenv/ -s /bin/bash patrauser
+WORKDIR /opt/patraenv/
+RUN chown patrauser:patrauser /var/log
+RUN chown patrauser:patrauser /var/run/
+RUN chown -R patrauser:patrauser /opt/patraenv/
+ENTRYPOINT exec java $JMX_OPTS $APM_OPTS $JVM_RESOURCES   -Dserver.port=8021 -Dspring.profiles.active=$jprofile  -jar bifrost-patrapomversion.jar
