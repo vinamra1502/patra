@@ -55,8 +55,6 @@ spec:
               value: "patra-bifrost"
             - name: "JVM_RESOURCES"
               value: "-Xmx2500m -Xms2500m"
-            - name: "natco"
-              value: "shared"
           ports:
             - name: patra-bifrost
               containerPort: 8021
